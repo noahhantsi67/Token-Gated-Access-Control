@@ -1,0 +1,303 @@
+;; (impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-009-nft-trait.nft-trait)
+
+(define-constant contract-owner tx-sender)
+(define-constant err-owner-only (err u100))
+(define-constant err-not-authorized (err u101))
+(define-constant err-invalid-resource (err u102))
+(define-constant err-access-denied (err u103))
+(define-constant err-nft-not-found (err u104))
+(define-constant err-invalid-token-id (err u105))
+(define-constant err-already-exists (err u106))
+(define-constant err-not-found (err u107))
+(define-constant err-expired (err u108))
+
+(define-data-var contract-uri (optional (string-utf8 256)) none)
+(define-data-var last-token-id uint u0)
+(define-data-var access-fee uint u1000000)
+
+(define-map tokens uint 
+  {
+    owner: principal,
+    metadata-uri: (optional (string-utf8 256)),
+    minted-at: uint,
+    access-level: uint
+  }
+)
+
+(define-map token-count principal uint)
+
+(define-map resources uint
+  {
+    name: (string-ascii 64),
+    description: (string-ascii 256),
+    required-access-level: uint,
+    creator: principal,
+    created-at: uint,
+    active: bool,
+    access-count: uint
+  }
+)
+
+(define-map resource-access {resource-id: uint, user: principal}
+  {
+    granted-at: uint,
+    expires-at: (optional uint),
+    access-count: uint
+  }
+)
+
+(define-map user-access-history principal (list 100 uint))
+(define-map resource-count principal uint)
+(define-data-var last-resource-id uint u0)
+
+(define-read-only (get-contract-uri)
+  (ok (var-get contract-uri))
+)
+
+(define-read-only (get-last-token-id)
+  (ok (var-get last-token-id))
+)
+
+(define-read-only (get-token-uri (token-id uint))
+  (ok (get metadata-uri (map-get? tokens token-id)))
+)
+
+(define-read-only (get-owner (token-id uint))
+  (ok (get owner (map-get? tokens token-id)))
+)
+
+(define-read-only (get-token-info (token-id uint))
+  (map-get? tokens token-id)
+)
+
+(define-read-only (get-balance (user principal))
+  (default-to u0 (map-get? token-count user))
+)
+
+(define-read-only (get-resource-info (resource-id uint))
+  (map-get? resources resource-id)
+)
+
+(define-read-only (get-user-tokens (user principal))
+  (let 
+    (
+      (total-tokens (var-get last-token-id))
+      (result (fold check-token-ownership (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31 u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47 u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63 u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74 u75 u76 u77 u78 u79 u80 u81 u82 u83 u84 u85 u86 u87 u88 u89 u90 u91 u92 u93 u94 u95 u96 u97 u98 u99 u100) {user: user, max-id: total-tokens, tokens: (list)}))
+    )
+    (get tokens result)
+  )
+)
+
+(define-private (check-token-ownership (token-id uint) (acc {user: principal, max-id: uint, tokens: (list 100 uint)}))
+  (if (and (<= token-id (get max-id acc)) (is-owner (get user acc) token-id))
+    (let ((new-list (as-max-len? (append (get tokens acc) token-id) u100)))
+      (if (is-some new-list)
+        (merge acc {tokens: (unwrap-panic new-list)})
+        acc))
+    acc
+  )
+)
+
+(define-read-only (get-user-access-level (user principal))
+  (let 
+    (
+      (total-tokens (var-get last-token-id))
+      (max-level (fold check-user-token-level (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31 u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47 u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63 u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74 u75 u76 u77 u78 u79 u80 u81 u82 u83 u84 u85 u86 u87 u88 u89 u90 u91 u92 u93 u94 u95 u96 u97 u98 u99 u100) {user: user, max-id: total-tokens, level: u0}))
+    )
+    (get level max-level)
+  )
+)
+
+(define-private (check-user-token-level (token-id uint) (acc {user: principal, max-id: uint, level: uint}))
+  (if (and (<= token-id (get max-id acc)) (is-owner (get user acc) token-id))
+    (let 
+      (
+        (token-data (unwrap-panic (map-get? tokens token-id)))
+        (token-level (get access-level token-data))
+        (current-max (get level acc))
+      )
+      (merge acc {level: (if (> token-level current-max) token-level current-max)})
+    )
+    acc
+  )
+)
+
+(define-private (is-owner (user principal) (token-id uint))
+  (match (map-get? tokens token-id)
+    token-data (is-eq user (get owner token-data))
+    false
+  )
+)
+
+(define-read-only (can-access-resource (user principal) (resource-id uint))
+  (match (map-get? resources resource-id)
+    resource-data
+      (let 
+        (
+          (required-level (get required-access-level resource-data))
+          (user-level (get-user-access-level user))
+          (is-active (get active resource-data))
+        )
+        (and is-active (>= user-level required-level))
+      )
+    false
+  )
+)
+
+(define-read-only (get-access-history (user principal))
+  (default-to (list) (map-get? user-access-history user))
+)
+
+(define-public (set-contract-uri (uri (optional (string-utf8 256))))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set contract-uri uri)
+    (ok true)
+  )
+)
+
+(define-public (mint-access-token (to principal) (metadata-uri (optional (string-utf8 256))) (access-level uint))
+  (let 
+    (
+      (token-id (+ (var-get last-token-id) u1))
+    )
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (try! (nft-mint? access-nft token-id to))
+    (map-set tokens token-id
+      {
+        owner: to,
+        metadata-uri: metadata-uri,
+        minted-at: stacks-block-height,
+        access-level: access-level
+      }
+    )
+    (map-set token-count to (+ (get-balance to) u1))
+    (var-set last-token-id token-id)
+    (ok token-id)
+  )
+)
+
+(define-public (transfer (token-id uint) (sender principal) (recipient principal))
+  (begin
+    (asserts! (is-eq tx-sender sender) err-not-authorized)
+    (asserts! (is-some (map-get? tokens token-id)) err-invalid-token-id)
+    (try! (nft-transfer? access-nft token-id sender recipient))
+    (map-set tokens token-id
+      (merge 
+        (unwrap-panic (map-get? tokens token-id))
+        {owner: recipient}
+      )
+    )
+    (map-set token-count sender (- (get-balance sender) u1))
+    (map-set token-count recipient (+ (get-balance recipient) u1))
+    (ok true)
+  )
+)
+
+(define-public (create-resource (name (string-ascii 64)) (description (string-ascii 256)) (required-access-level uint))
+  (let 
+    (
+      (resource-id (+ (var-get last-resource-id) u1))
+    )
+    (map-set resources resource-id
+      {
+        name: name,
+        description: description,
+        required-access-level: required-access-level,
+        creator: tx-sender,
+        created-at: stacks-block-height,
+        active: true,
+        access-count: u0
+      }
+    )
+    (map-set resource-count tx-sender (+ (default-to u0 (map-get? resource-count tx-sender)) u1))
+    (var-set last-resource-id resource-id)
+    (ok resource-id)
+  )
+)
+
+(define-public (update-resource-status (resource-id uint) (active bool))
+  (match (map-get? resources resource-id)
+    resource-data
+      (begin
+        (asserts! (is-eq tx-sender (get creator resource-data)) err-not-authorized)
+        (map-set resources resource-id
+          (merge resource-data {active: active})
+        )
+        (ok true)
+      )
+    err-not-found
+  )
+)
+
+(define-public (request-access (resource-id uint))
+  (let 
+    (
+      (user tx-sender)
+    )
+    (asserts! (can-access-resource user resource-id) err-access-denied)
+    (match (map-get? resources resource-id)
+      resource-data
+        (begin
+          (let 
+            (
+              (existing-access (map-get? resource-access {resource-id: resource-id, user: user}))
+              (current-count (match existing-access
+                access-data (get access-count access-data)
+                u0))
+            )
+            (map-set resource-access {resource-id: resource-id, user: user}
+              {
+                granted-at: stacks-block-height,
+                expires-at: none,
+                access-count: (+ current-count u1)
+              }
+            )
+                )
+          (map-set resources resource-id
+            (merge resource-data {access-count: (+ (get access-count resource-data) u1)})
+          )
+          (map-set user-access-history user 
+            (unwrap! (as-max-len? (append (get-access-history user) resource-id) u100) err-invalid-resource)
+          )
+          (ok true)
+        )
+      err-invalid-resource
+    )
+  )
+)
+
+(define-public (revoke-access (resource-id uint) (user principal))
+  (match (map-get? resources resource-id)
+    resource-data
+      (begin
+        (asserts! (is-eq tx-sender (get creator resource-data)) err-not-authorized)
+        (map-delete resource-access {resource-id: resource-id, user: user})
+        (ok true)
+      )
+    err-not-found
+  )
+)
+
+(define-public (set-access-fee (new-fee uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set access-fee new-fee)
+    (ok true)
+  )
+)
+
+(define-public (burn-token (token-id uint))
+  (let 
+    (
+      (owner (unwrap! (get-owner token-id) err-invalid-token-id))
+    )
+    (asserts! (is-eq tx-sender (unwrap-panic owner)) err-not-authorized)
+    (try! (nft-burn? access-nft token-id tx-sender))
+    (map-delete tokens token-id)
+    (map-set token-count tx-sender (- (get-balance tx-sender) u1))
+    (ok true)
+  )
+)
+
+(define-non-fungible-token access-nft uint)
