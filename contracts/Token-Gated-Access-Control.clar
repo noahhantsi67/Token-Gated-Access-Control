@@ -151,7 +151,8 @@
 (define-public (set-contract-uri (uri (optional (string-utf8 256))))
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
-    (ok (var-set contract-uri uri))
+    (var-set contract-uri uri)
+    (ok true)
   )
 )
 
@@ -281,7 +282,8 @@
 (define-public (set-access-fee (new-fee uint))
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
-    (ok (var-set access-fee new-fee))
+    (var-set access-fee new-fee)
+    (ok true)
   )
 )
 
