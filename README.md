@@ -1,185 +1,168 @@
 # 🔐 Token-Gated Access Control
 
-A Stacks blockchain smart contract that enables access control to digital resources and services based on NFT ownership. Users must own specific access tokens with appropriate access levels to interact with protected content.
+A Clarity smart contract that enables NFT-based access control for digital content and services. Users must own specific NFTs with appropriate access levels to unlock premium content, join exclusive groups, or access special features.
 
-## ✨ Features
+## 🚀 Features
 
-- 🎫 **NFT-Based Access Control**: Grant access to resources based on NFT ownership
-- 📊 **Tiered Access Levels**: Different access levels for various types of content
-- 🏗️ **Resource Management**: Create and manage protected resources
-- 📈 **Usage Analytics**: Track access patterns and usage statistics
-- 🔥 **Token Burning**: Remove access by burning tokens
-- 👥 **Multi-User Support**: Handle multiple users and resource creators
+- **🎫 NFT Access Tokens**: Mint unique access tokens with different permission levels
+- **📚 Resource Management**: Create and manage gated content/services
+- **🛡️ Granular Permissions**: Multi-level access control system
+- **📊 Usage Tracking**: Monitor access patterns and resource popularity
+- **🔄 Dynamic Control**: Enable/disable resources and revoke access when needed
 
-## 🚀 Getting Started
+## 🏗️ Contract Overview
+
+### Core Components
+
+- **Access NFTs**: ERC-721 compliant tokens that grant access rights
+- **Resources**: Digital content/services protected by access requirements  
+- **Access Levels**: Hierarchical permission system (1-10 scale)
+- **Usage Analytics**: Track access history and resource engagement
+
+### Key Functions
+
+#### 🎨 NFT Management
+```clarity
+(mint-access-token recipient metadata-uri access-level)
+(transfer token-id sender recipient)
+(burn-token token-id)
+```
+
+#### 📝 Resource Management
+```clarity
+(create-resource name description required-access-level)
+(update-resource-status resource-id active)
+(revoke-access resource-id user)
+```
+
+#### 🔍 Access Control
+```clarity
+(can-access-resource user resource-id)
+(request-access resource-id)
+(get-user-access-level user)
+```
+
+## 📖 Usage Examples
+
+### 1. 🎓 Online Course Platform
+```clarity
+;; Create premium course requiring level 3 access
+(create-resource "Advanced DeFi Strategies" "Master-level cryptocurrency course" u3)
+
+;; Mint premium membership NFT
+(mint-access-token 'ST1234... (some "ipfs://metadata") u3)
+
+;; Student requests course access
+(request-access u1)
+```
+
+### 2. 🎭 Exclusive Community
+```clarity
+;; Create VIP Discord server access
+(create-resource "VIP Community" "Exclusive member discussions" u5)
+
+;; Mint VIP membership
+(mint-access-token 'ST5678... (some "ipfs://vip-badge") u5)
+```
+
+### 3. 🛠️ SaaS Feature Gates
+```clarity
+;; Create pro feature set
+(create-resource "Advanced Analytics" "Pro dashboard features" u2)
+
+;; User with level 2+ token can access
+(can-access-resource 'ST9012... u1) ;; returns true/false
+```
+
+## 🔧 Development Setup
 
 ### Prerequisites
-
 - [Clarinet](https://github.com/hirosystems/clarinet) installed
-- Stacks wallet for testing
+- Node.js 16+ for testing
 
 ### Installation
-
-1. Clone this repository
-2. Run clarinet tests:
 ```bash
-clarinet test
+# Clone repository
+git clone <repository-url>
+cd token-gated-access-control
+
+# Check contract syntax
+clarinet check
+
+# Run tests
+npm install
+npm test
 ```
 
-## 📖 Usage
-
-### For Contract Owners 👑
-
-#### Mint Access Tokens
-```clarity
-(contract-call? .Token-Gated-Access-Control mint-access-token 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE 
-  (some "https://metadata-uri.com/token/1") 
-  u3)
-```
-
-#### Set Contract URI
-```clarity
-(contract-call? .Token-Gated-Access-Control set-contract-uri 
-  (some "https://contract-metadata.com"))
-```
-
-### For Resource Creators 🛠️
-
-#### Create Protected Resources
-```clarity
-(contract-call? .Token-Gated-Access-Control create-resource 
-  "Premium Course" 
-  "Advanced blockchain development course" 
-  u2)
-```
-
-#### Manage Resource Status
-```clarity
-(contract-call? .Token-Gated-Access-Control update-resource-status u1 false)
-```
-
-#### Revoke User Access
-```clarity
-(contract-call? .Token-Gated-Access-Control revoke-access 
-  u1 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE)
-```
-
-### For End Users 🎯
-
-#### Request Resource Access
-```clarity
-(contract-call? .Token-Gated-Access-Control request-access u1)
-```
-
-#### Transfer Access Tokens
-```clarity
-(contract-call? .Token-Gated-Access-Control transfer 
-  u1 
-  tx-sender 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE)
-```
-
-#### Burn Tokens
-```clarity
-(contract-call? .Token-Gated-Access-Control burn-token u1)
-```
-
-## 🔍 Query Functions
-
-### Check Access Permissions
-```clarity
-(contract-call? .Token-Gated-Access-Control can-access-resource 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE 
-  u1)
-```
-
-### Get User Access Level
-```clarity
-(contract-call? .Token-Gated-Access-Control get-user-access-level 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE)
-```
-
-### Get Token Information
-```clarity
-(contract-call? .Token-Gated-Access-Control get-token-info u1)
-```
-
-### Get Resource Details
-```clarity
-(contract-call? .Token-Gated-Access-Control get-resource-info u1)
-```
-
-### Get User's Access History
-```clarity
-(contract-call? .Token-Gated-Access-Control get-access-history 
-  'ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE)
-```
-
-## 📊 Access Levels
-
-- **Level 0**: No access
-- **Level 1**: Basic access 
-- **Level 2**: Premium access
-- **Level 3**: VIP access
-- **Level 4+**: Custom tiers
-
-## 🔧 Contract Architecture
-
-The contract implements several key components:
-
-- **NFT Management**: Handles minting, transferring, and burning of access tokens
-- **Resource System**: Manages protected resources with access level requirements
-- **Access Control**: Validates user permissions based on token ownership
-- **Analytics**: Tracks usage patterns and access history
-
-## 🧪 Testing
-
-Run the test suite:
+### Deployment
 ```bash
-clarinet test
+# Deploy to testnet
+clarinet deployments generate --testnet
+
+# Deploy to mainnet
+clarinet deployments generate --mainnet
 ```
 
-Example test scenarios:
-- Minting access tokens with different levels
-- Creating resources with various access requirements
-- Testing access control validation
-- Verifying transfer and burn functionality
+## 🎯 Use Cases
+
+- **🎮 Gaming**: Unlock special levels, characters, or items
+- **📱 Mobile Apps**: Premium features and ad-free experiences  
+- **🎵 Music/Media**: Exclusive content and early access
+- **💼 Business Tools**: Advanced features and higher usage limits
+- **🎪 Events**: VIP access and special perks
+- **📚 Education**: Advanced courses and certification programs
 
 ## 🛡️ Security Features
 
-- ✅ Owner-only functions for critical operations
-- ✅ Access level validation
-- ✅ Token ownership verification
-- ✅ Resource creator permissions
-- ✅ Comprehensive error handling
+- **Owner-only minting**: Only contract owner can create access tokens
+- **Creator permissions**: Resource creators control their content
+- **Transfer validation**: Secure NFT ownership transfers
+- **Access verification**: Real-time permission checking
+- **Usage limits**: Prevent abuse with built-in constraints
 
-## 📄 Error Codes
+## 📊 Data Structures
 
-- `u100`: Owner only operation
-- `u101`: Not authorized
-- `u102`: Invalid resource
-- `u103`: Access denied
-- `u104`: NFT not found
-- `u105`: Invalid token ID
-- `u106`: Already exists
-- `u107`: Not found
-- `u108`: Expired
+### Access Token
+```clarity
+{
+  owner: principal,
+  metadata-uri: (optional (string-utf8 256)),
+  minted-at: uint,
+  access-level: uint
+}
+```
+
+### Resource
+```clarity
+{
+  name: (string-ascii 64),
+  description: (string-ascii 256),
+  required-access-level: uint,
+  creator: principal,
+  created-at: uint,
+  active: bool,
+  access-count: uint
+}
+```
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📝 License
+## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Links
+## 🆘 Support
 
-- [Stacks Documentation](https://docs.stacks.co/)
-- [Clarity Language Reference](https://docs.stacks.co/clarity/)
-- [Clarinet Documentation](https://github.com/hirosystems/clarinet)
+- 📧 Email: support@example.com
+- 💬 Discord: [Join our community](https://discord.gg/example)
+- 📖 Documentation: [Full docs](https://docs.example.com)
+
+---
+
+**Built with ❤️ using Clarity and Stacks blockchain**
