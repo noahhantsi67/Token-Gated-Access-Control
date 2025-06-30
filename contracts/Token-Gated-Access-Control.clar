@@ -1,4 +1,4 @@
-(impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-009-nft-trait.nft-trait)
+;; (impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-009-nft-trait.nft-trait)
 
 (define-constant contract-owner tx-sender)
 (define-constant err-owner-only (err u100))
@@ -78,50 +78,54 @@
   (map-get? resources resource-id)
 )
 
-(define-read-only (get-user-access-level (user principal))
-  (let 
-    (
-      (user-tokens (get-user-tokens user))
-      (max-level (fold get-max-access-level user-tokens u0))
-    )
-    max-level
-  )
-)
-
 (define-read-only (get-user-tokens (user principal))
   (let 
     (
       (total-tokens (var-get last-token-id))
+      (result (fold check-token-ownership (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31 u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47 u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63 u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74 u75 u76 u77 u78 u79 u80 u81 u82 u83 u84 u85 u86 u87 u88 u89 u90 u91 u92 u93 u94 u95 u96 u97 u98 u99 u100) {user: user, max-id: total-tokens, tokens: (list)}))
     )
-    (filter-user-tokens user (list-range u1 total-tokens))
+    (get tokens result)
   )
 )
 
-(define-private (filter-user-tokens (user principal) (token-list (list 1000 uint)))
-  (filter (lambda (token-id) (is-owner user token-id)) token-list)
+(define-private (check-token-ownership (token-id uint) (acc {user: principal, max-id: uint, tokens: (list 100 uint)}))
+  (if (and (<= token-id (get max-id acc)) (is-owner (get user acc) token-id))
+    (let ((new-list (as-max-len? (append (get tokens acc) token-id) u100)))
+      (if (is-some new-list)
+        (merge acc {tokens: (unwrap-panic new-list)})
+        acc))
+    acc
+  )
+)
+
+(define-read-only (get-user-access-level (user principal))
+  (let 
+    (
+      (total-tokens (var-get last-token-id))
+      (max-level (fold check-user-token-level (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31 u32 u33 u34 u35 u36 u37 u38 u39 u40 u41 u42 u43 u44 u45 u46 u47 u48 u49 u50 u51 u52 u53 u54 u55 u56 u57 u58 u59 u60 u61 u62 u63 u64 u65 u66 u67 u68 u69 u70 u71 u72 u73 u74 u75 u76 u77 u78 u79 u80 u81 u82 u83 u84 u85 u86 u87 u88 u89 u90 u91 u92 u93 u94 u95 u96 u97 u98 u99 u100) {user: user, max-id: total-tokens, level: u0}))
+    )
+    (get level max-level)
+  )
+)
+
+(define-private (check-user-token-level (token-id uint) (acc {user: principal, max-id: uint, level: uint}))
+  (if (and (<= token-id (get max-id acc)) (is-owner (get user acc) token-id))
+    (let 
+      (
+        (token-data (unwrap-panic (map-get? tokens token-id)))
+        (token-level (get access-level token-data))
+        (current-max (get level acc))
+      )
+      (merge acc {level: (if (> token-level current-max) token-level current-max)})
+    )
+    acc
+  )
 )
 
 (define-private (is-owner (user principal) (token-id uint))
   (match (map-get? tokens token-id)
     token-data (is-eq user (get owner token-data))
     false
-  )
-)
-
-(define-private (get-max-access-level (token-id uint) (current-max uint))
-  (match (map-get? tokens token-id)
-    token-data 
-      (let ((token-level (get access-level token-data)))
-        (if (> token-level current-max) token-level current-max)
-      )
-    current-max
-  )
-)
-
-(define-private (list-range (start uint) (end uint))
-  (if (<= start end)
-    (unwrap! (as-max-len? (append (list-range start (- end u1)) end) u1000) (list))
-    (list)
   )
 )
 
@@ -234,13 +238,21 @@
     (match (map-get? resources resource-id)
       resource-data
         (begin
-          (map-set resource-access {resource-id: resource-id, user: user}
-            {
-              granted-at: stacks-block-height,
-              expires-at: none,
-              access-count: (+ (default-to u0 (get access-count (default-to {granted-at: u0, expires-at: none, access-count: u0} (map-get? resource-access {resource-id: resource-id, user: user})))) u1)
-            }
-          )
+          (let 
+            (
+              (existing-access (map-get? resource-access {resource-id: resource-id, user: user}))
+              (current-count (match existing-access
+                access-data (get access-count access-data)
+                u0))
+            )
+            (map-set resource-access {resource-id: resource-id, user: user}
+              {
+                granted-at: stacks-block-height,
+                expires-at: none,
+                access-count: (+ current-count u1)
+              }
+            )
+                )
           (map-set resources resource-id
             (merge resource-data {access-count: (+ (get access-count resource-data) u1)})
           )
