@@ -1,5 +1,3 @@
-;; (impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-009-nft-trait.nft-trait)
-
 (define-constant contract-owner tx-sender)
 (define-constant err-owner-only (err u100))
 (define-constant err-not-authorized (err u101))
@@ -10,6 +8,11 @@
 (define-constant err-already-exists (err u106))
 (define-constant err-not-found (err u107))
 (define-constant err-expired (err u108))
+
+(define-constant err-delegation-expired (err u109))
+(define-constant err-delegation-not-found (err u110))
+(define-constant err-invalid-delegation (err u111))
+
 
 (define-data-var contract-uri (optional (string-utf8 256)) none)
 (define-data-var last-token-id uint u0)
@@ -301,3 +304,105 @@
 )
 
 (define-non-fungible-token access-nft uint)
+
+
+(define-map token-delegations {token-id: uint, delegatee: principal}
+  {
+    delegator: principal,
+    expires-at: uint,
+    created-at: uint,
+    active: bool
+  }
+)
+
+(define-map user-delegations principal (list 50 uint))
+
+
+(define-read-only (has-delegated-access (user principal) (token-id uint))
+  (match (map-get? token-delegations {token-id: token-id, delegatee: user})
+    delegation-data
+      (and 
+        (get active delegation-data)
+        (> (get expires-at delegation-data) stacks-block-height)
+      )
+    false
+  )
+)
+
+(define-read-only (get-delegation-info (token-id uint) (delegatee principal))
+  (map-get? token-delegations {token-id: token-id, delegatee: delegatee})
+)
+
+
+(define-read-only (get-effective-access-level (user principal))
+  (let 
+    (
+      (owned-level (get-user-access-level user))
+      (delegated-tokens (default-to (list) (map-get? user-delegations user)))
+      (delegated-level (fold check-delegated-token-level delegated-tokens u0))
+    )
+    (if (> delegated-level owned-level) delegated-level owned-level)
+  )
+)
+
+(define-private (check-delegated-token-level (token-id uint) (current-max uint))
+  (if (has-delegated-access tx-sender token-id)
+    (match (map-get? tokens token-id)
+      token-data
+        (let ((token-level (get access-level token-data)))
+          (if (> token-level current-max) token-level current-max)
+        )
+      current-max
+    )
+    current-max
+  )
+)
+
+
+(define-public (delegate-token (token-id uint) (delegatee principal) (duration uint))
+  (let 
+    (
+      (expires-at (+ stacks-block-height duration))
+    )
+    (asserts! (is-owner tx-sender token-id) err-not-authorized)
+    (asserts! (not (is-eq tx-sender delegatee)) err-invalid-delegation)
+    (asserts! (> duration u0) err-invalid-delegation)
+    (map-set token-delegations {token-id: token-id, delegatee: delegatee}
+      {
+        delegator: tx-sender,
+        expires-at: expires-at,
+        created-at: stacks-block-height,
+        active: true
+      }
+    )
+    (map-set user-delegations delegatee
+      (unwrap! (as-max-len? (append (default-to (list) (map-get? user-delegations delegatee)) token-id) u50) err-invalid-delegation)
+    )
+    (ok expires-at)
+  )
+)
+
+
+(define-public (revoke-delegation (token-id uint) (delegatee principal))
+  (begin
+    (asserts! (is-owner tx-sender token-id) err-not-authorized)
+    (map-delete token-delegations {token-id: token-id, delegatee: delegatee})
+    (ok true)
+  )
+)
+
+
+(define-read-only (can-access-resource-enhanced (user principal) (resource-id uint))
+  (match (map-get? resources resource-id)
+    resource-data
+      (let 
+        (
+          (required-level (get required-access-level resource-data))
+          (user-level (get-effective-access-level user))
+          (is-active (get active resource-data))
+        )
+        (and is-active (>= user-level required-level))
+      )
+    false
+  )
+)
