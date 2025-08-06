@@ -13,6 +13,9 @@
 (define-constant err-delegation-not-found (err u110))
 (define-constant err-invalid-delegation (err u111))
 
+(define-constant err-subscription-expired (err u112))
+(define-constant err-subscription-not-found (err u113))
+(define-constant err-invalid-duration (err u114))
 
 (define-data-var contract-uri (optional (string-utf8 256)) none)
 (define-data-var last-token-id uint u0)
@@ -404,5 +407,92 @@
         (and is-active (>= user-level required-level))
       )
     false
+  )
+)
+
+(define-map resource-subscriptions {resource-id: uint, user: principal}
+  {
+    expires-at: uint,
+    created-at: uint,
+    renewed-count: uint,
+    subscription-type: (string-ascii 32)
+  }
+)
+
+(define-map subscription-plans uint
+  {
+    resource-id: uint,
+    duration: uint,
+    price: uint,
+    plan-name: (string-ascii 32),
+    active: bool
+  }
+)
+
+(define-data-var last-plan-id uint u0)
+
+(define-read-only (has-active-subscription (user principal) (resource-id uint))
+  (match (map-get? resource-subscriptions {resource-id: resource-id, user: user})
+    subscription-data
+      (> (get expires-at subscription-data) stacks-block-height)
+    false
+  )
+)
+
+(define-read-only (get-subscription-info (user principal) (resource-id uint))
+  (map-get? resource-subscriptions {resource-id: resource-id, user: user})
+)
+
+(define-read-only (get-plan-info (plan-id uint))
+  (map-get? subscription-plans plan-id)
+)
+
+(define-public (create-subscription-plan (resource-id uint) (duration uint) (price uint) (plan-name (string-ascii 32)))
+  (let ((plan-id (+ (var-get last-plan-id) u1)))
+    (asserts! (is-some (map-get? resources resource-id)) err-invalid-resource)
+    (asserts! (> duration u0) err-invalid-duration)
+    (map-set subscription-plans plan-id
+      {
+        resource-id: resource-id,
+        duration: duration,
+        price: price,
+        plan-name: plan-name,
+        active: true
+      }
+    )
+    (var-set last-plan-id plan-id)
+    (ok plan-id)
+  )
+)
+
+(define-public (subscribe-to-resource (plan-id uint))
+  (match (map-get? subscription-plans plan-id)
+    plan-data
+      (let 
+        (
+          (resource-id (get resource-id plan-data))
+          (duration (get duration plan-data))
+          (expires-at (+ stacks-block-height duration))
+          (existing-sub (map-get? resource-subscriptions {resource-id: resource-id, user: tx-sender}))
+        )
+        (asserts! (get active plan-data) err-not-found)
+        (map-set resource-subscriptions {resource-id: resource-id, user: tx-sender}
+          {
+            expires-at: expires-at,
+            created-at: stacks-block-height,
+            renewed-count: (match existing-sub sub-data (+ (get renewed-count sub-data) u1) u0),
+            subscription-type: (get plan-name plan-data)
+          }
+        )
+        (ok expires-at)
+      )
+    err-not-found
+  )
+)
+
+(define-read-only (can-access-resource-with-subscription (user principal) (resource-id uint))
+  (or 
+    (can-access-resource-enhanced user resource-id)
+    (has-active-subscription user resource-id)
   )
 )
