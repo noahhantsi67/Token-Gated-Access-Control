@@ -496,3 +496,96 @@
     (has-active-subscription user resource-id)
   )
 )
+
+(define-map user-reputation principal
+  {
+    total-score: uint,
+    last-activity: uint,
+    resource-access-count: uint,
+    token-transfer-count: uint,
+    streak-days: uint,
+    bonus-level: uint
+  }
+)
+
+(define-map daily-activity {user: principal, day: uint} bool)
+(define-data-var reputation-multiplier uint u10)
+
+(define-read-only (get-reputation-info (user principal))
+  (default-to 
+    {total-score: u0, last-activity: u0, resource-access-count: u0, 
+     token-transfer-count: u0, streak-days: u0, bonus-level: u0}
+    (map-get? user-reputation user)
+  )
+)
+
+(define-read-only (calculate-reputation-bonus (user principal))
+  (let ((rep-data (get-reputation-info user)))
+    (if (> (get total-score rep-data) u1000)
+        (if (> (get streak-days rep-data) u7) u3
+            (if (> (get streak-days rep-data) u3) u2 u1))
+        u0)
+  )
+)
+
+(define-read-only (get-enhanced-access-level (user principal))
+  (let 
+    ((base-level (get-effective-access-level user))
+     (reputation-bonus (calculate-reputation-bonus user)))
+    (+ base-level reputation-bonus)
+  )
+)
+
+(define-private (update-reputation (user principal) (activity-type (string-ascii 20)) (points uint))
+  (let 
+    ((current-rep (get-reputation-info user))
+     (current-day (/ stacks-block-height u144))
+     (last-day (/ (get last-activity current-rep) u144))
+     (new-streak (if (is-eq (+ last-day u1) current-day) 
+                     (+ (get streak-days current-rep) u1) 
+                     (if (is-eq last-day current-day) (get streak-days current-rep) u1))))
+    (map-set user-reputation user
+      {
+        total-score: (+ (get total-score current-rep) points),
+        last-activity: stacks-block-height,
+        resource-access-count: (if (is-eq activity-type "resource-access") 
+                                   (+ (get resource-access-count current-rep) u1)
+                                   (get resource-access-count current-rep)),
+        token-transfer-count: (if (is-eq activity-type "token-transfer")
+                                  (+ (get token-transfer-count current-rep) u1)
+                                  (get token-transfer-count current-rep)),
+        streak-days: new-streak,
+        bonus-level: (calculate-reputation-bonus user)
+      }
+    )
+    (map-set daily-activity {user: user, day: current-day} true)
+  )
+)
+
+(define-public (request-access-with-reputation (resource-id uint))
+  (let ((user tx-sender))
+    (asserts! (>= (get-enhanced-access-level user) 
+                  (unwrap! (get required-access-level (map-get? resources resource-id)) err-invalid-resource))
+              err-access-denied)
+    (try! (request-access resource-id))
+    (update-reputation user "resource-access" (* (var-get reputation-multiplier) u5))
+    (ok true)
+  )
+)
+
+(define-public (transfer-with-reputation (token-id uint) (sender principal) (recipient principal))
+  (begin
+    (try! (transfer token-id sender recipient))
+    (update-reputation sender "token-transfer" (* (var-get reputation-multiplier) u2))
+    (update-reputation recipient "token-receive" (var-get reputation-multiplier))
+    (ok true)
+  )
+)
+
+(define-public (set-reputation-multiplier (new-multiplier uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set reputation-multiplier new-multiplier)
+    (ok true)
+  )
+)
