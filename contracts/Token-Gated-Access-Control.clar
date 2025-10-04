@@ -17,6 +17,12 @@
 (define-constant err-subscription-not-found (err u113))
 (define-constant err-invalid-duration (err u114))
 
+(define-constant err-not-co-owner (err u200))
+(define-constant err-invalid-shares (err u201))
+(define-constant err-too-many-owners (err u202))
+(define-constant err-already-co-owner (err u203))
+(define-constant err-no-balance (err u204))
+
 (define-data-var contract-uri (optional (string-utf8 256)) none)
 (define-data-var last-token-id uint u0)
 (define-data-var access-fee uint u1000000)
@@ -587,5 +593,109 @@
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
     (var-set reputation-multiplier new-multiplier)
     (ok true)
+  )
+)
+
+
+(define-map resource-co-owners {resource-id: uint, owner: principal}
+  {
+    share-percentage: uint,
+    earnings-balance: uint,
+    joined-at: uint,
+    active: bool
+  }
+)
+
+(define-map resource-owner-list uint (list 10 principal))
+(define-map resource-total-earnings uint uint)
+(define-map resource-withdrawal-count uint uint)
+
+(define-read-only (get-co-owner-info (resource-id uint) (owner principal))
+  (map-get? resource-co-owners {resource-id: resource-id, owner: owner})
+)
+
+(define-read-only (get-owner-list (resource-id uint))
+  (default-to (list) (map-get? resource-owner-list resource-id))
+)
+
+(define-read-only (get-total-earnings (resource-id uint))
+  (default-to u0 (map-get? resource-total-earnings resource-id))
+)
+
+(define-read-only (calculate-owner-share (resource-id uint) (owner principal) (total-amount uint))
+  (match (map-get? resource-co-owners {resource-id: resource-id, owner: owner})
+    co-owner-data
+      (/ (* total-amount (get share-percentage co-owner-data)) u100)
+    u0
+  )
+)
+
+(define-public (add-co-owner (resource-id uint) (new-owner principal) (share-percentage uint))
+  (let
+    (
+      (current-owners (get-owner-list resource-id))
+      (existing-data (map-get? resource-co-owners {resource-id: resource-id, owner: tx-sender}))
+    )
+    (asserts! (is-some existing-data) err-not-co-owner)
+    (asserts! (< (len current-owners) u10) err-too-many-owners)
+    (asserts! (and (> share-percentage u0) (<= share-percentage u100)) err-invalid-shares)
+    (asserts! (is-none (map-get? resource-co-owners {resource-id: resource-id, owner: new-owner})) err-already-co-owner)
+    (map-set resource-co-owners {resource-id: resource-id, owner: new-owner}
+      {
+        share-percentage: share-percentage,
+        earnings-balance: u0,
+        joined-at: stacks-block-height,
+        active: true
+      }
+    )
+    (map-set resource-owner-list resource-id
+      (unwrap! (as-max-len? (append current-owners new-owner) u10) err-too-many-owners)
+    )
+    (ok true)
+  )
+)
+
+(define-public (distribute-earnings (resource-id uint) (amount uint))
+  (let ((owners (get-owner-list resource-id)))
+    (map-set resource-total-earnings resource-id (+ (get-total-earnings resource-id) amount))
+    (ok (fold distribute-to-owner owners {resource-id: resource-id, amount: amount}))
+  )
+)
+
+(define-private (distribute-to-owner (owner principal) (context {resource-id: uint, amount: uint}))
+  (let
+    (
+      (resource-id (get resource-id context))
+      (total-amount (get amount context))
+      (owner-share (calculate-owner-share resource-id owner total-amount))
+    )
+    (match (map-get? resource-co-owners {resource-id: resource-id, owner: owner})
+      co-owner-data
+        (if (get active co-owner-data)
+          (map-set resource-co-owners {resource-id: resource-id, owner: owner}
+            (merge co-owner-data {earnings-balance: (+ (get earnings-balance co-owner-data) owner-share)})
+          )
+          false
+        )
+      false
+    )
+    context
+  )
+)
+
+(define-public (withdraw-earnings (resource-id uint))
+  (match (map-get? resource-co-owners {resource-id: resource-id, owner: tx-sender})
+    co-owner-data
+      (let ((balance (get earnings-balance co-owner-data)))
+        (asserts! (> balance u0) err-no-balance)
+        (map-set resource-co-owners {resource-id: resource-id, owner: tx-sender}
+          (merge co-owner-data {earnings-balance: u0})
+        )
+        (map-set resource-withdrawal-count resource-id 
+          (+ (default-to u0 (map-get? resource-withdrawal-count resource-id)) u1)
+        )
+        (ok balance)
+      )
+    err-not-co-owner
   )
 )
