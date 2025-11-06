@@ -699,3 +699,100 @@
     err-not-co-owner
   )
 )
+
+(define-map token-rental-listings uint
+  {
+    owner: principal,
+    hourly-rate: uint,
+    min-duration: uint,
+    max-duration: uint,
+    active: bool,
+    total-rentals: uint,
+    total-earned: uint
+  }
+)
+
+(define-map active-rentals {token-id: uint, renter: principal}
+  {
+    starts-at: uint,
+    expires-at: uint,
+    rental-fee: uint,
+    owner: principal
+  }
+)
+
+(define-map renter-history principal (list 50 uint))
+(define-map rental-earnings principal uint)
+
+(define-read-only (get-rental-listing (token-id uint))
+  (map-get? token-rental-listings token-id)
+)
+
+(define-read-only (get-active-rental (token-id uint) (renter principal))
+  (map-get? active-rentals {token-id: token-id, renter: renter})
+)
+
+(define-read-only (has-rental-access (user principal) (token-id uint))
+  (match (map-get? active-rentals {token-id: token-id, renter: user})
+    rental-data (> (get expires-at rental-data) stacks-block-height)
+    false
+  )
+)
+
+(define-read-only (get-rental-earnings (user principal))
+  (default-to u0 (map-get? rental-earnings user))
+)
+
+(define-public (list-token-for-rent (token-id uint) (hourly-rate uint) (min-duration uint) (max-duration uint))
+  (begin
+    (asserts! (is-owner tx-sender token-id) err-not-authorized)
+    (asserts! (> hourly-rate u0) err-invalid-token-id)
+    (asserts! (and (> min-duration u0) (<= min-duration max-duration)) err-invalid-duration)
+    (map-set token-rental-listings token-id
+      {
+        owner: tx-sender,
+        hourly-rate: hourly-rate,
+        min-duration: min-duration,
+        max-duration: max-duration,
+        active: true,
+        total-rentals: u0,
+        total-earned: u0
+      }
+    )
+    (ok true)
+  )
+)
+
+(define-public (rent-token (token-id uint) (duration uint))
+  (match (map-get? token-rental-listings token-id)
+    listing-data
+      (let
+        ((rental-fee (/ (* (get hourly-rate listing-data) duration) u6))
+         (expires-at (+ stacks-block-height duration)))
+        (asserts! (get active listing-data) err-not-found)
+        (asserts! (and (>= duration (get min-duration listing-data)) 
+                       (<= duration (get max-duration listing-data))) err-invalid-duration)
+        (map-set active-rentals {token-id: token-id, renter: tx-sender}
+          {starts-at: stacks-block-height, expires-at: expires-at, 
+           rental-fee: rental-fee, owner: (get owner listing-data)}
+        )
+        (map-set rental-earnings (get owner listing-data)
+          (+ (get-rental-earnings (get owner listing-data)) rental-fee)
+        )
+        (map-set token-rental-listings token-id
+          (merge listing-data {total-rentals: (+ (get total-rentals listing-data) u1),
+                               total-earned: (+ (get total-earned listing-data) rental-fee)})
+        )
+        (ok expires-at)
+      )
+    err-not-found
+  )
+)
+
+(define-public (withdraw-rental-earnings)
+  (let ((balance (get-rental-earnings tx-sender)))
+    (asserts! (> balance u0) err-no-balance)
+    (map-set rental-earnings tx-sender u0)
+    (ok balance)
+  )
+)
